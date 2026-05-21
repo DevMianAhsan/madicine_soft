@@ -26,7 +26,7 @@
             min-height: 297mm;
             margin: 10mm auto;
             background: #fff;
-            padding: 15mm;
+            padding: 15mm 10mm;
             position: relative;
             box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
         }
@@ -36,6 +36,13 @@
                 background: none;
                 margin: 0;
                 padding: 0;
+            }
+
+            .page-container {
+                width: 100%;
+                margin: 0;
+                padding: 20mm 15mm;
+                box-shadow: none;
             }
 
             .no-print {
@@ -229,7 +236,7 @@
             font-weight: 900;
             margin-top: 12px;
             padding-top: 8px;
-            border-top: 2px solid #000;
+
         }
 
         .totals-breakdown {
@@ -517,6 +524,7 @@
                     $totalGross = 0;
                     $totalDiscountAmount = 0;
                     $totalNet = 0;
+                    $totalTax = 0;
 
                     while ($r = mysqli_fetch_assoc($order_item)) {
                         $c++;
@@ -524,17 +532,17 @@
                         $bonus_qty = (float) @$r['bonus_qty'];
                         $rate = (float) $r['rate'];
                         $discount_perc = !empty($r['discount']) ? (float) $r['discount'] : 0.0;
+                        $item_tax = (float) ($r['tax'] ?? 0);
 
                         // Calculations matching your example logic
                         $gross_amount = $quantity * $rate;
                         $discount_amount = $gross_amount * ($discount_perc / 100);
                         $net_amount = $gross_amount - $discount_amount;
-                        // If you have sales tax column logic → add here (currently 0 in your sample)
-                        $sales_tax = 0.00;
 
                         $totalGross += $gross_amount;
                         $totalDiscountAmount += $discount_amount;
-                        $totalNet += $net_amount;
+                        $totalTax += $item_tax;
+                        $totalNet += $net_amount + $item_tax;
                         $grandTotalItems += $quantity;
                         ?>
                         <tr>
@@ -557,6 +565,24 @@
                         </tr>
                     <?php } ?>
                 </tbody>
+                <tfoot>
+                    <tr style="border-top: 2px solid #000; border-bottom: 2px solid #000;">
+                        <td colspan="7" class="text-right"
+                            style="font-weight: 900; font-size: 11pt; padding: 8px 6px; font-style: italic;">Grand Total:
+                        </td>
+                        <td class="text-right" style="font-weight: 900; font-size: 11pt; padding: 8px 6px;">
+                            <?= number_format($totalGross, 2) ?></td>
+                        <td class="text-right" style="font-weight: 900; font-size: 11pt; padding: 8px 6px;"></td>
+                        <td class="text-right" style="font-weight: 900; font-size: 11pt; padding: 8px 6px;">
+                            <?= number_format($totalDiscountAmount, 2) ?></td>
+                        <?php if ($_REQUEST['type'] == "order"): ?>
+                            <td class="text-right" style="font-weight: 900; font-size: 11pt; padding: 8px 6px;">
+                                <?= number_format($totalTax, 2) ?></td>
+                        <?php endif; ?>
+                        <td class="text-right" style="font-weight: 900; font-size: 11pt; padding: 8px 6px;">
+                            <?= number_format($totalNet, 2) ?></td>
+                    </tr>
+                </tfoot>
             </table>
 
             <div class="summary-section">
@@ -566,20 +592,26 @@
                 <div class="totals-box">
                     <div class="totals-breakdown">
                         <table>
-                            <tr>
-                                <td class="label">Net Amount</td>
-                                <td class="amount">
-                                    <?= number_format($order['total_amount'] + ($_REQUEST['type'] == "order" ? $order['tax'] : 0), 2) ?>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="label">Discounted Amount</td>
-                                <td class="amount"><?= number_format($order['grand_total'], 2) ?></td>
-                            </tr>
+
                             <?php if (isset($order['freight']) && $order['freight'] > 0): ?>
                                 <tr>
                                     <td class="label">Freight</td>
                                     <td class="amount"><?= number_format($order['freight'], 2) ?></td>
+                                </tr>
+                            <?php endif; ?>
+                            <?php if (!empty($order['discount']) && $order['discount'] > 0):
+                                $sub_total_with_tax = $order['total_amount'] + (isset($order['tax']) ? $order['tax'] : 0);
+                                $order_discount_amount = round($sub_total_with_tax * $order['discount'] / 100, 2);
+                                ?>
+                                <!-- <tr>
+                                    <td class="label">Total Value</td>
+                                    <td class="amount">
+                                        <?= number_format($order['total_amount'] + ($_REQUEST['type'] == "order" ? $order['tax'] : 0), 2) ?>
+                                    </td>
+                                </tr> -->
+                                <tr style="border-bottom: 2px solid #000;">
+                                    <td class="label">Discount</td>
+                                    <td class="amount">- <?= number_format($order_discount_amount, 2) ?></td>
                                 </tr>
                             <?php endif; ?>
                         </table>

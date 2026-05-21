@@ -400,7 +400,7 @@ $brand_main_filter = ($brand_id > 0)
                         // ────────────────────────────────────────────────
                         // Period quantities per product
                         // ────────────────────────────────────────────────
-                        $rece = $pret = $sales_qty = $bonus_qty = $sales_value = $sret_qty = $sret_value = [];
+                        $rece = $pret = $sales_qty = $bonus_qty = $sales_value = $sret_qty = $sret_value = $discount_amount = [];
 
                         $sql_rece = "SELECT pi.product_id, SUM(pi.quantity) AS qty
                                      FROM purchase_item pi INNER JOIN purchase p ON pi.purchase_id = p.purchase_id
@@ -423,7 +423,8 @@ $brand_main_filter = ($brand_id > 0)
                         $sql_sales = "SELECT oi.product_id, 
                                              SUM(oi.quantity) AS qty, 
                                              SUM(oi.bonus_qty) AS bonus_qty, 
-                                             SUM(oi.total) AS amount
+                                             SUM(oi.total) AS amount,
+                                             SUM((COALESCE(oi.rate, 0) * COALESCE(oi.quantity, 0) * (COALESCE(oi.discount, 0) / 100)) + (COALESCE(oi.total, 0) * (COALESCE(o.discount, 0) / 100))) AS total_discount
                                       FROM order_item oi 
                                       INNER JOIN orders o ON oi.order_id = o.order_id
                                       WHERE o.order_date BETWEEN '$from_date' AND '$to_date'
@@ -435,6 +436,7 @@ $brand_main_filter = ($brand_id > 0)
                                 $sales_qty[$r['product_id']] = (float) $r['qty'];
                                 $bonus_qty[$r['product_id']] = (float) $r['bonus_qty'];
                                 $sales_value[$r['product_id']] = (float) $r['amount'];
+                                $discount_amount[$r['product_id']] = (float) $r['total_discount'];
                             }
                         }
 
@@ -451,7 +453,7 @@ $brand_main_filter = ($brand_id > 0)
                             }
                         }
 
-                        $tot_opening_value = $tot_total_value = $tot_closing_value = $tot_sales_value = $tot_bonus_qty = 0;
+                        $tot_opening_value = $tot_total_value = $tot_closing_value = $tot_sales_value = $tot_bonus_qty = $tot_discount_value = 0;
                         ?>
 
                         <div class="table-responsive">
@@ -467,13 +469,14 @@ $brand_main_filter = ($brand_id > 0)
                                         <th>Net Sales</th>
                                         <th>Bonus Given</th>
                                         <th>Closed Balanced</th>
+                                        <th>Discount</th>
                                         <th>Net Sales Value</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if (empty($products)): ?>
                                         <tr>
-                                            <td colspan="10" class="text-center text-muted py-4">
+                                            <td colspan="11" class="text-center text-muted py-4">
                                                 No active products found<?= $brand_id > 0 ? " for selected brand" : "" ?>.
                                             </td>
                                         </tr>
@@ -493,6 +496,7 @@ $brand_main_filter = ($brand_id > 0)
                                             $closing_qty = $total_stock - $net_sales_q - $bonus_q;
 
                                             $net_sales_val = ($sales_value[$pid] ?? 0) - ($sret_value[$pid] ?? 0);
+                                            $discount_val = $discount_amount[$pid] ?? 0;
 
                                             $pack = $product_packs[$pid] ?? '';
 
@@ -502,6 +506,7 @@ $brand_main_filter = ($brand_id > 0)
                                             $tot_closing_value += $closing_qty * $avg;
                                             $tot_sales_value += $net_sales_val;
                                             $tot_bonus_qty += $bonus_q;
+                                            $tot_discount_value += $discount_val;
                                             ?>
                                             <tr>
                                                 <td class="product-name"><?= htmlspecialchars($name) ?></td>
@@ -513,6 +518,8 @@ $brand_main_filter = ($brand_id > 0)
                                                 <td class="num-cell"><?= number_format($net_sales_q, 0) ?></td>
                                                 <td class="num-cell"><?= number_format($bonus_q, 0) ?></td>
                                                 <td class="num-cell"><strong><?= number_format($closing_qty, 0) ?></strong></td>
+                                                <td class="num-cell"><strong><?= number_format($discount_val, 2) ?></strong>
+                                                </td>
                                                 <td class="num-cell"><strong><?= number_format($net_sales_val, 2) ?></strong>
                                                 </td>
                                             </tr>
@@ -523,7 +530,8 @@ $brand_main_filter = ($brand_id > 0)
                                     <tr class="total-row">
                                         <td colspan="2"><strong>Total Value</strong></td>
                                         <td class="num-cell">
-                                            <strong><?= number_format($tot_opening_value, 2) ?></strong></td>
+                                            <strong><?= number_format($tot_opening_value, 2) ?></strong>
+                                        </td>
                                         <td class="num-cell"><strong><?= number_format($rece_value_total, 2) ?></strong>
                                         </td>
                                         <td class="num-cell"><strong><?= number_format($pret_value_total, 2) ?></strong>
@@ -534,9 +542,23 @@ $brand_main_filter = ($brand_id > 0)
                                         </td>
                                         <td class="num-cell"><strong><?= number_format($tot_bonus_qty, 0) ?></strong>
                                         </td>
+
                                         <td class="num-cell">
-                                            <strong><?= number_format($tot_closing_value, 2) ?></strong></td>
+                                            <strong><?= number_format($tot_closing_value, 2) ?></strong>
+                                        </td>
+                                        <td class="num-cell">
+                                            <strong><?= number_format($tot_discount_value, 2) ?></strong>
+                                        </td>
                                         <td class="num-cell"><strong><?= number_format($tot_sales_value, 2) ?></strong>
+                                        </td>
+                                    </tr>
+                                    <tr class="total-row">
+                                        <td colspan="9" style="text-align:right; font-size: 20px; font-weight: bold;">
+                                            <strong>Net Sale</strong>
+                                        </td>
+                                        <td colspan="2" class="num-cell"
+                                            style="font-size: 20px; font-weight: bold; color: #000;">
+                                            <?= number_format($tot_sales_value + $tot_discount_value, 2) ?>
                                         </td>
                                     </tr>
                                 </tfoot>
